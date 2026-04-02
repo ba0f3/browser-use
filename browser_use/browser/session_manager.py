@@ -465,6 +465,21 @@ class SessionManager:
 		# Enable lifecycle events and network monitoring for page targets
 		if target_type in ('page', 'tab'):
 			await self._enable_page_monitoring(cdp_session)
+			if self.browser_session.browser_profile.stealth_mode:
+				try:
+					from browser_use.browser.stealth import STEALTH_INIT_SCRIPT
+
+					await cdp_session.cdp_client.send.Page.addScriptToEvaluateOnNewDocument(
+						params={'source': STEALTH_INIT_SCRIPT, 'runImmediately': True},
+						session_id=cdp_session.session_id,
+					)
+				except Exception as e:
+					# Do not fail browser startup for stealth: targets can be short-lived or detach quickly.
+					error_str = str(e)
+					if '-32001' not in error_str and 'Session with given id not found' not in error_str:
+						self.logger.debug(
+							f'[SessionManager] Stealth init-script injection failed for target {target_id[:8]}...: {type(e).__name__}: {e}'
+						)
 
 		# Resume execution if waiting for debugger
 		if waiting_for_debugger:

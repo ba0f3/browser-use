@@ -24,6 +24,27 @@ def _get_enable_default_extensions_default() -> bool:
 	return True
 
 
+def _get_default_stealth_user_agent() -> str:
+	"""Return a non-headless Chrome UA for basic headless masking."""
+	# Keep this intentionally conservative: a stable, non-Headless Chrome UA is better than
+	# advertising HeadlessChrome. Users can always provide an explicit user_agent.
+	if sys.platform.startswith('linux'):
+		return (
+			'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
+			'Chrome/122.0.0.0 Safari/537.36'
+		)
+	if sys.platform == 'darwin':
+		return (
+			'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
+			'Chrome/122.0.0.0 Safari/537.36'
+		)
+	# Windows fallback
+	return (
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+		'Chrome/122.0.0.0 Safari/537.36'
+	)
+
+
 CHROME_DEBUG_PORT = 9242  # use a non-default port to avoid conflicts with other tools / devs using 9222
 DOMAIN_OPTIMIZATION_THRESHOLD = 100  # Convert domain lists to sets for O(1) lookup when >= this size
 CHROME_DISABLED_COMPONENTS = [
@@ -577,6 +598,14 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 	# custom options we provide that aren't native playwright kwargs
 	disable_security: bool = Field(default=False, description='Disable browser security features.')
+	stealth_mode: bool = Field(
+		default=False,
+		description=(
+			'Enable best-effort stealth mitigations for local Chromium. This applies conservative launch hardening and '
+			'in-page evasions. It is not a guarantee. For production-grade stealth, CAPTCHA handling, and proxy rotation, '
+			'consider using Browser Use Cloud (use_cloud=True).'
+		),
+	)
 	deterministic_rendering: bool = Field(default=False, description='Enable deterministic rendering flags.')
 	allowed_domains: list[str] | set[str] | None = Field(
 		default=None,
@@ -600,7 +629,13 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 	)
 	enable_default_extensions: bool = Field(
 		default_factory=_get_enable_default_extensions_default,
-		description="Enable automation-optimized extensions: ad blocking (uBlock Origin), cookie handling (I still don't care about cookies), and URL cleaning (ClearURLs). All extensions work automatically without manual intervention. Extensions are automatically downloaded and loaded when enabled. Can be disabled via BROWSER_USE_DISABLE_EXTENSIONS=1 environment variable.",
+		description=(
+			'Enable automation-optimized extensions: ad blocking (uBlock Origin), cookie handling (I still don\'t care '
+			'about cookies), and URL cleaning (ClearURLs). All extensions work automatically without manual intervention. '
+			'Extensions are automatically downloaded and loaded when enabled. Note: any extension can be fingerprintable; '
+			'for stricter stealth, consider enable_default_extensions=False. Can be disabled via '
+			'BROWSER_USE_DISABLE_EXTENSIONS=1 environment variable.'
+		),
 	)
 	captcha_solver: bool = Field(
 		default=True,
@@ -888,6 +923,8 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		# User agent flag
 		if self.user_agent:
 			pre_conversion_args.append(f'--user-agent={self.user_agent}')
+		elif self.stealth_mode and self.headless:
+			pre_conversion_args.append(f'--user-agent={_get_default_stealth_user_agent()}')
 
 		# Special handling for --disable-features to merge values instead of overwriting
 		# This prevents disable_security=True from breaking extensions by ensuring

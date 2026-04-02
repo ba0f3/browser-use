@@ -60,10 +60,13 @@ class Page:
 			# Enable necessary domains
 			import asyncio
 
+			stealth_mode = bool(getattr(self._browser_session.browser_profile, 'stealth_mode', False))
+			runtime_enable = [] if stealth_mode else [self._client.send.Runtime.enable(session_id=self._session_id)]
+
 			await asyncio.gather(
 				self._client.send.Page.enable(session_id=self._session_id),
 				self._client.send.DOM.enable(session_id=self._session_id),
-				self._client.send.Runtime.enable(session_id=self._session_id),
+				*runtime_enable,
 				self._client.send.Network.enable(session_id=self._session_id),
 			)
 
