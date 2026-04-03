@@ -920,10 +920,10 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 			if proxy_bypass:
 				pre_conversion_args.append(f'--proxy-bypass-list={proxy_bypass}')
 
-		# User agent flag
+		# User agent flag (args_as_dict keeps the last --user-agent; avoid appending stealth UA over explicit args)
 		if self.user_agent:
 			pre_conversion_args.append(f'--user-agent={self.user_agent}')
-		elif self.stealth_mode and self.headless:
+		elif self.stealth_mode and self.headless and not any(arg.startswith('--user-agent=') for arg in self.args):
 			pre_conversion_args.append(f'--user-agent={_get_default_stealth_user_agent()}')
 
 		# Special handling for --disable-features to merge values instead of overwriting

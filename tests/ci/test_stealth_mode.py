@@ -62,3 +62,29 @@ def test_stealth_headless_ua_normalization():
 	ua_args = [a for a in args if a.startswith("--user-agent=")]
 	assert len(ua_args) == 1
 	assert "HeadlessChrome" not in ua_args[0]
+
+
+def test_stealth_headless_respects_explicit_user_agent_in_args():
+	explicit = "--user-agent=ExplicitUA/1.0"
+	profile = BrowserProfile(
+		headless=True,
+		user_data_dir=None,
+		stealth_mode=True,
+		args=[explicit],
+	)
+	args = profile.get_args()
+	ua_args = [a for a in args if a.startswith("--user-agent=")]
+	assert ua_args == [explicit]
+
+
+def test_stealth_headless_respects_user_agent_field():
+	explicit = "ExplicitUA/2.0"
+	profile = BrowserProfile(
+		headless=True,
+		user_data_dir=None,
+		stealth_mode=True,
+		user_agent=explicit,
+	)
+	args = profile.get_args()
+	ua_args = [a for a in args if a.startswith("--user-agent=")]
+	assert ua_args == [f"--user-agent={explicit}"]
