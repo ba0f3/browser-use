@@ -24,24 +24,31 @@ def _get_enable_default_extensions_default() -> bool:
 	return True
 
 
+# Chrome version token embedded in stealth User-Agent strings (see _get_default_stealth_user_agent).
+# Set STEALTH_CHROME_VERSION (e.g. 131.0.0.0) to match your runtime without editing code.
+# TODO(browser-use): Bump DEFAULT_STEALTH_CHROME_VERSION periodically so defaults stay near common stable Chrome.
+DEFAULT_STEALTH_CHROME_VERSION = '122.0.0.0'
+
+
 def _get_default_stealth_user_agent() -> str:
 	"""Return a non-headless Chrome UA for basic headless masking."""
 	# Keep this intentionally conservative: a stable, non-Headless Chrome UA is better than
 	# advertising HeadlessChrome. Users can always provide an explicit user_agent.
+	chrome_ver = (os.getenv('STEALTH_CHROME_VERSION') or '').strip() or DEFAULT_STEALTH_CHROME_VERSION
 	if sys.platform.startswith('linux'):
 		return (
-			'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
-			'Chrome/122.0.0.0 Safari/537.36'
+			f'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
+			f'Chrome/{chrome_ver} Safari/537.36'
 		)
 	if sys.platform == 'darwin':
 		return (
-			'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
-			'Chrome/122.0.0.0 Safari/537.36'
+			f'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
+			f'Chrome/{chrome_ver} Safari/537.36'
 		)
 	# Windows fallback
 	return (
-		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-		'Chrome/122.0.0.0 Safari/537.36'
+		f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+		f'Chrome/{chrome_ver} Safari/537.36'
 	)
 
 
