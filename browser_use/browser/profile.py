@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Iterable
@@ -29,15 +30,32 @@ def _get_enable_default_extensions_default() -> bool:
 # TODO(browser-use): Bump DEFAULT_STEALTH_CHROME_VERSION periodically so defaults stay near common stable Chrome.
 DEFAULT_STEALTH_CHROME_VERSION = '147.0.0.0'
 
+# Matches Chrome-style tokens like 147.0, 147.0.0, 147.0.0.0 (reject paths, injection, etc.)
+_STEALTH_CHROME_VERSION_RE = re.compile(r'^\d+\.\d+(\.\d+)*$')
+
+
+def _resolve_stealth_chrome_version() -> str:
+	"""Return validated STEALTH_CHROME_VERSION or DEFAULT_STEALTH_CHROME_VERSION."""
+	env_raw = (os.getenv('STEALTH_CHROME_VERSION') or '').strip()
+	if not env_raw:
+		return DEFAULT_STEALTH_CHROME_VERSION
+	if _STEALTH_CHROME_VERSION_RE.fullmatch(env_raw):
+		return env_raw
+	logger.warning(
+		f'Invalid STEALTH_CHROME_VERSION={env_raw!r} (expected digits separated by dots, e.g. 147.0.0.0); '
+		f'using DEFAULT_STEALTH_CHROME_VERSION={DEFAULT_STEALTH_CHROME_VERSION!r}'
+	)
+	return DEFAULT_STEALTH_CHROME_VERSION
+
 
 def _get_default_stealth_user_agent() -> str:
 	"""Return a non-headless Chrome UA for basic headless masking.
 
-	Uses DEFAULT_STEALTH_CHROME_VERSION unless the STEALTH_CHROME_VERSION environment variable is set.
+	Uses DEFAULT_STEALTH_CHROME_VERSION unless STEALTH_CHROME_VERSION is set to a valid dotted version string.
 	"""
 	# Keep this intentionally conservative: a stable, non-Headless Chrome UA is better than
 	# advertising HeadlessChrome. Users can always provide an explicit user_agent.
-	chrome_ver = (os.getenv('STEALTH_CHROME_VERSION') or '').strip() or DEFAULT_STEALTH_CHROME_VERSION
+	chrome_ver = _resolve_stealth_chrome_version()
 	if sys.platform.startswith('linux'):
 		return (
 			f'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '

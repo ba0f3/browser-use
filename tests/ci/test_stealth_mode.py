@@ -9,7 +9,11 @@ import pytest
 from pytest_httpserver import HTTPServer
 
 from browser_use.browser import BrowserSession
-from browser_use.browser.profile import BrowserProfile
+from browser_use.browser.profile import (
+	BrowserProfile,
+	DEFAULT_STEALTH_CHROME_VERSION,
+	_get_default_stealth_user_agent,
+)
 
 
 @pytest.fixture(scope="session")
@@ -88,3 +92,17 @@ def test_stealth_headless_respects_user_agent_field():
 	args = profile.get_args()
 	ua_args = [a for a in args if a.startswith("--user-agent=")]
 	assert ua_args == [f"--user-agent={explicit}"]
+
+
+def test_stealth_chrome_version_env_valid(monkeypatch):
+	monkeypatch.setenv('STEALTH_CHROME_VERSION', '200.1.2.3')
+	ua = _get_default_stealth_user_agent()
+	assert 'Chrome/200.1.2.3' in ua
+	assert 'HeadlessChrome' not in ua
+
+
+def test_stealth_chrome_version_env_invalid_falls_back(monkeypatch):
+	monkeypatch.setenv('STEALTH_CHROME_VERSION', 'not-a-version;;')
+	ua = _get_default_stealth_user_agent()
+	assert f'Chrome/{DEFAULT_STEALTH_CHROME_VERSION}' in ua
+	assert 'not-a-version' not in ua
