@@ -61,6 +61,7 @@ uv init && uv add browser-use && uv sync
 BROWSER_USE_API_KEY=your-key
 # GOOGLE_API_KEY=your-key
 # ANTHROPIC_API_KEY=your-key
+# STEALTH_CHROME_VERSION=147.0.0.0  # Optional: Chrome version token in the default stealth User-Agent (local headless)
 ```
 
 **3. Run your first agent:**

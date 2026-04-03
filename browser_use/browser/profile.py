@@ -25,13 +25,16 @@ def _get_enable_default_extensions_default() -> bool:
 
 
 # Chrome version token embedded in stealth User-Agent strings (see _get_default_stealth_user_agent).
-# Set STEALTH_CHROME_VERSION (e.g. 131.0.0.0) to match your runtime without editing code.
+# Operators can set env STEALTH_CHROME_VERSION (e.g. 147.0.0.0) to match their Chromium build without code changes.
 # TODO(browser-use): Bump DEFAULT_STEALTH_CHROME_VERSION periodically so defaults stay near common stable Chrome.
-DEFAULT_STEALTH_CHROME_VERSION = '122.0.0.0'
+DEFAULT_STEALTH_CHROME_VERSION = '147.0.0.0'
 
 
 def _get_default_stealth_user_agent() -> str:
-	"""Return a non-headless Chrome UA for basic headless masking."""
+	"""Return a non-headless Chrome UA for basic headless masking.
+
+	Uses DEFAULT_STEALTH_CHROME_VERSION unless the STEALTH_CHROME_VERSION environment variable is set.
+	"""
 	# Keep this intentionally conservative: a stable, non-Headless Chrome UA is better than
 	# advertising HeadlessChrome. Users can always provide an explicit user_agent.
 	chrome_ver = (os.getenv('STEALTH_CHROME_VERSION') or '').strip() or DEFAULT_STEALTH_CHROME_VERSION
