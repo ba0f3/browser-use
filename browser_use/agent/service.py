@@ -133,7 +133,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	def __init__(
 		self,
 		task: str,
-		llm: BaseChatModel | None = None,
+		llm: BaseChatModel | None = None,  # planner: default for navigator, extractor, and judge when those are not set
 		# Optional parameters
 		browser_profile: BrowserProfile | None = None,
 		browser_session: BrowserSession | None = None,
@@ -177,7 +177,10 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		flash_mode: bool = False,
 		demo_mode: bool | None = None,
 		max_history_items: int | None = None,
+		# Multi-LLM: `llm` is the planner (default for navigator, extractor, judge when not overridden).
+		navigator_llm: BaseChatModel | None = None,
 		page_extraction_llm: BaseChatModel | None = None,
+		extractor_llm: BaseChatModel | None = None,  # Alias for page_extraction_llm
 		fallback_llm: BaseChatModel | None = None,
 		use_judge: bool = True,
 		ground_truth: str | None = None,
@@ -239,21 +242,27 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		if flash_mode:
 			enable_planning = False
 
-		# Auto-configure llm_screenshot_size for Claude Sonnet models
+		planner_llm = llm
+		if page_extraction_llm is not None and extractor_llm is not None and page_extraction_llm is not extractor_llm:
+			raise ValueError(
+				'page_extraction_llm and extractor_llm must be the same instance when both are provided, '
+				'or pass only one of them.'
+			)
+		resolved_page_extraction_llm = page_extraction_llm or extractor_llm or planner_llm
+		resolved_judge_llm = judge_llm or planner_llm
+		resolved_navigator_llm = navigator_llm or planner_llm
+
+		# Auto-configure llm_screenshot_size for Claude Sonnet models (navigator receives screenshots)
 		if llm_screenshot_size is None:
-			model_name = getattr(llm, 'model', '')
+			model_name = getattr(resolved_navigator_llm, 'model', '')
 			if isinstance(model_name, str) and model_name.startswith('claude-sonnet'):
 				llm_screenshot_size = (1400, 850)
 				logger.info('🖼️  Auto-configured LLM screenshot size for Claude Sonnet: 1400x850')
 
-		if page_extraction_llm is None:
-			page_extraction_llm = llm
-		if judge_llm is None:
-			judge_llm = llm
 		if available_file_paths is None:
 			available_file_paths = []
 
-		# Set timeout based on model name if not explicitly provided
+		# Set timeout based on navigator model name if not explicitly provided
 		if llm_timeout is None:
 
 			def _get_model_timeout(llm_model: BaseChatModel) -> int:
@@ -270,7 +279,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				else:
 					return 75  # Default timeout
 
-			llm_timeout = _get_model_timeout(llm)
+			llm_timeout = _get_model_timeout(resolved_navigator_llm)
 
 		self.id = task_id or uuid7str()
 		self.task_id: str = self.id
@@ -319,8 +328,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		if use_vision != 'auto':
 			self.tools.exclude_action('screenshot')
 
-		# Enable coordinate clicking for models that support it
-		model_name = getattr(llm, 'model', '').lower()
+		# Enable coordinate clicking for models that support it (navigator drives the action loop)
+		model_name = getattr(resolved_navigator_llm, 'model', '').lower()
 		supports_coordinate_clicking = any(
 			pattern in model_name for pattern in ['claude-sonnet-4', 'claude-opus-4', 'gemini-3-pro', 'browser-use/']
 		)
@@ -365,13 +374,14 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 		# Core components - task enhancement now has access to output_model_schema from tools
 		self.task = self._enhance_task_with_schema(task, output_model_schema)
-		self.llm = llm
-		self.judge_llm = judge_llm
+		self.planner_llm: BaseChatModel = planner_llm
+		self.llm: BaseChatModel = resolved_navigator_llm
+		self.judge_llm = resolved_judge_llm
 
 		# Fallback LLM configuration
 		self._fallback_llm: BaseChatModel | None = fallback_llm
 		self._using_fallback_llm: bool = False
-		self._original_llm: BaseChatModel = llm  # Store original for reference
+		self._original_llm: BaseChatModel = resolved_navigator_llm  # Initial navigator (for fallback logs)
 		self.directly_open_url = directly_open_url
 		self.include_recent_events = include_recent_events
 		self._url_shortening_limit = _url_shortening_limit
@@ -397,7 +407,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			use_thinking=use_thinking,
 			flash_mode=flash_mode,
 			max_history_items=max_history_items,
-			page_extraction_llm=page_extraction_llm,
+			navigator_llm=resolved_navigator_llm,
+			page_extraction_llm=resolved_page_extraction_llm,
 			calculate_cost=calculate_cost,
 			include_tool_call_examples=include_tool_call_examples,
 			llm_timeout=llm_timeout,
@@ -416,9 +427,11 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 		# Token cost service
 		self.token_cost_service = TokenCost(include_cost=calculate_cost, pricing_url=pricing_url)
-		self.token_cost_service.register_llm(llm)
-		self.token_cost_service.register_llm(page_extraction_llm)
-		self.token_cost_service.register_llm(judge_llm)
+		self.token_cost_service.register_llm(planner_llm)
+		if resolved_navigator_llm is not planner_llm:
+			self.token_cost_service.register_llm(resolved_navigator_llm)
+		self.token_cost_service.register_llm(resolved_page_extraction_llm)
+		self.token_cost_service.register_llm(resolved_judge_llm)
 		if self.settings.message_compaction and self.settings.message_compaction.compaction_llm:
 			self.token_cost_service.register_llm(self.settings.message_compaction.compaction_llm)
 
@@ -1153,7 +1166,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		if not settings or not settings.enabled:
 			return
 
-		compaction_llm = settings.compaction_llm or self.settings.page_extraction_llm or self.llm
+		compaction_llm = settings.compaction_llm or self.settings.page_extraction_llm or self.planner_llm
 		await self._message_manager.maybe_compact_messages(
 			llm=compaction_llm,
 			settings=settings,
@@ -2038,9 +2051,14 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	def _log_first_step_startup(self) -> None:
 		"""Log startup message only on the first step"""
 		if len(self.history.history) == 0:
-			self.logger.info(
-				f'Starting a browser-use agent with version {self.version}, with provider={self.llm.provider} and model={self.llm.model}'
+			nav = self.llm.model if hasattr(self.llm, 'model') else 'unknown'
+			start_msg = (
+				f'Starting a browser-use agent with version {self.version}, with provider={self.llm.provider} and model={nav}'
 			)
+			if self.planner_llm is not self.llm:
+				pl = self.planner_llm.model if hasattr(self.planner_llm, 'model') else 'unknown'
+				start_msg += f' (planner={pl})'
+			self.logger.info(start_msg)
 
 	def _log_step_context(self, browser_state_summary: BrowserStateSummary) -> None:
 		"""Log step context information"""
@@ -2895,9 +2913,9 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		try:
 			# Determine which LLM to use
 			if summary_llm is None:
-				# Try to use the agent's LLM first
-				summary_llm = self.llm
-				self.logger.debug('Using agent LLM for rerun summary')
+				# Default to planner (same as extractor/judge defaults when not overridden)
+				summary_llm = self.planner_llm
+				self.logger.debug('Using planner LLM for rerun summary')
 			else:
 				self.logger.debug(f'Using provided LLM for rerun summary: {summary_llm.model}')
 
@@ -2976,8 +2994,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		from browser_use.llm.messages import SystemMessage, UserMessage
 		from browser_use.utils import sanitize_surrogates
 
-		# Use provided LLM or agent's LLM
-		llm = ai_step_llm or self.llm
+		# Use provided LLM, else extractor, else planner (not the navigator)
+		llm = ai_step_llm or self.settings.page_extraction_llm or self.planner_llm
 		self.logger.debug(f'Using LLM for AI step: {llm.model}')
 
 		# Extract clean markdown

@@ -78,6 +78,8 @@ class AgentSettings(BaseModel):
 	planning_replan_on_stall: int = 3  # consecutive failures before replan nudge; 0 = disabled
 	planning_exploration_limit: int = 5  # steps without a plan before nudge; 0 = disabled
 
+	# Multi-LLM: effective navigator model for the main loop (same as Agent.llm after init)
+	navigator_llm: BaseChatModel | None = None
 	page_extraction_llm: BaseChatModel | None = None
 	calculate_cost: bool = False
 	include_tool_call_examples: bool = False
