@@ -12,7 +12,7 @@ uv sync
 
 - Do not replace model names. Users try new models which you will not know about yet.
 
-- **Agent multi-LLM roles:** `llm` is the **planner** (default hub). Optional **`navigator_llm`** drives only the main per-step loop (`agent.llm` after init). Optional **`page_extraction_llm`** or **`extractor_llm`** (same meaning; do not pass two different models) is used for the `extract` tool. Unset roles fall back to the planner. Planning fields in the output still share the same step as navigation (one LLM call per step for the navigator); there is no separate planner-only inference unless the codebase adds it.
+- **Agent multi-LLM roles:** `llm` is the **planner** (default hub). Optional **`navigator_llm`** drives only the main per-step loop (`agent.llm` after init). Optional **`page_extraction_llm`** or **`extractor_llm`** (same meaning; do not pass two different models) is used for the `extract` tool. Unset roles fall back to the planner. **`flash_mode` / `enable_planning`** follow the **navigator** (so the output schema matches the model that runs the step). Message history compaction uses **`message_compaction.compaction_llm`** when set, otherwise **`planner_llm`** (not the extractor). Planning fields in the output still share the same step as navigation (one LLM call per step for the navigator); there is no separate planner-only inference unless the codebase adds it.
 
 - Type-safe coding: Use Pydantic v2 models for all internal action schemas, task inputs/outputs, and tools I/O. This ensures robust validation and LLM-call integrity.
 

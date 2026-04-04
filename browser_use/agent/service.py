@@ -234,14 +234,6 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 				llm = ChatBrowserUse()
 
-		# set flashmode = True if llm is ChatBrowserUse
-		if llm.provider == 'browser-use':
-			flash_mode = True
-
-		# Flash mode strips plan fields from the output schema, so planning is structurally impossible
-		if flash_mode:
-			enable_planning = False
-
 		planner_llm = llm
 		if page_extraction_llm is not None and extractor_llm is not None and page_extraction_llm is not extractor_llm:
 			raise ValueError(
@@ -251,6 +243,14 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		resolved_page_extraction_llm = page_extraction_llm or extractor_llm or planner_llm
 		resolved_judge_llm = judge_llm or planner_llm
 		resolved_navigator_llm = navigator_llm or planner_llm
+
+		# Navigator drives flash_mode / planning (output schema must match the model that runs get_model_output)
+		if resolved_navigator_llm.provider == 'browser-use':
+			flash_mode = True
+
+		# Flash mode strips plan fields from the output schema, so planning is structurally impossible
+		if flash_mode:
+			enable_planning = False
 
 		# Auto-configure llm_screenshot_size for Claude Sonnet models (navigator receives screenshots)
 		if llm_screenshot_size is None:
@@ -1166,7 +1166,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		if not settings or not settings.enabled:
 			return
 
-		compaction_llm = settings.compaction_llm or self.settings.page_extraction_llm or self.planner_llm
+		compaction_llm = settings.compaction_llm if settings.compaction_llm is not None else self.planner_llm
 		await self._message_manager.maybe_compact_messages(
 			llm=compaction_llm,
 			settings=settings,
@@ -2192,7 +2192,14 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	def _log_agent_event(self, max_steps: int, agent_run_error: str | None = None) -> None:
 		"""Sent the agent event for this run to telemetry"""
 
-		token_summary = self.token_cost_service.get_usage_tokens_for_model(self.llm.model)
+		prompt_total = 0
+		completion_total = 0
+		cached_total = 0
+		for entry in self.token_cost_service.usage_history:
+			prompt_total += entry.usage.prompt_tokens
+			completion_total += entry.usage.completion_tokens
+			cached_total += entry.usage.prompt_cached_tokens or 0
+		total_token_count = prompt_total + completion_total
 
 		# Prepare action_history data correctly
 		action_history_data = []
@@ -2238,10 +2245,10 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				action_history=action_history_data,
 				urls_visited=self.history.urls(),
 				steps=self.state.n_steps,
-				total_input_tokens=token_summary.prompt_tokens,
-				total_output_tokens=token_summary.completion_tokens,
-				prompt_cached_tokens=token_summary.prompt_cached_tokens,
-				total_tokens=token_summary.total_tokens,
+				total_input_tokens=prompt_total,
+				total_output_tokens=completion_total,
+				prompt_cached_tokens=cached_total,
+				total_tokens=total_token_count,
 				total_duration_seconds=self.history.total_duration_seconds(),
 				success=self.history.is_successful(),
 				final_result_response=final_result_str,

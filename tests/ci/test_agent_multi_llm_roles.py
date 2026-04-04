@@ -56,3 +56,23 @@ def test_page_extraction_llm_extractor_llm_conflict_raises():
 	e2 = create_mock_llm()
 	with pytest.raises(ValueError, match='page_extraction_llm and extractor_llm'):
 		Agent(task='task', llm=planner, page_extraction_llm=e1, extractor_llm=e2)
+
+
+def test_flash_mode_follows_navigator_when_navigator_overrides_planner():
+	"""Planner browser-use no longer forces flash_mode if navigator is a different provider."""
+	planner = create_mock_llm()
+	planner.provider = 'browser-use'
+	navigator = create_mock_llm()
+	navigator.provider = 'mock'
+	agent = Agent(task='task', llm=planner, navigator_llm=navigator, flash_mode=False)
+	assert agent.settings.flash_mode is False
+
+
+def test_flash_mode_true_when_navigator_has_browser_use_provider():
+	planner = create_mock_llm()
+	planner.provider = 'mock'
+	navigator = create_mock_llm()
+	navigator.provider = 'browser-use'
+	agent = Agent(task='task', llm=planner, navigator_llm=navigator, flash_mode=False)
+	assert agent.settings.flash_mode is True
+	assert agent.settings.enable_planning is False
