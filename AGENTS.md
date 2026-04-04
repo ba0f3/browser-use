@@ -12,6 +12,8 @@ uv sync
 
 - Do not replace model names. Users try new models which you will not know about yet.
 
+- **Agent multi-LLM roles:** `llm` is the **planner** (default hub). Optional **`navigator_llm`** drives only the main per-step loop (`agent.llm` after init). Optional **`page_extraction_llm`** or **`extractor_llm`** (same meaning; do not pass two different models) is used for the `extract` tool. Unset roles fall back to the planner. **`flash_mode` / `enable_planning`** follow the **navigator** (so the output schema matches the model that runs the step). Message history compaction uses **`message_compaction.compaction_llm`** when set, otherwise **`planner_llm`** (not the extractor). Planning fields in the output still share the same step as navigation (one LLM call per step for the navigator); there is no separate planner-only inference unless the codebase adds it.
+
 - Type-safe coding: Use Pydantic v2 models for all internal action schemas, task inputs/outputs, and tools I/O. This ensures robust validation and LLM-call integrity.
 
 - Pre-commit formatting: ALWAYS make sure to run pre-commit before making PRs.
@@ -272,7 +274,7 @@ async def main():
 ```
 
 * `task`: The task you want to automate.
-* `llm`: Your favorite LLM. See <a href="https://docs.browser-use.com/customize/agent/supported-models">Supported Models</a>.
+* `llm`: Your favorite LLM (**planner**): default for navigator, extraction, judge, and related helpers when those are not overridden. See <a href="https://docs.browser-use.com/customize/agent/supported-models">Supported Models</a>.
 
 The agent is executed using the async `run()` method:
 
@@ -295,7 +297,9 @@ Check out all customizable parameters <a href="https://docs.browser-use.com/cust
 
 * `use_vision` (default: `"auto"`): Vision mode - `"auto"` includes screenshot tool but only uses vision when requested, `True` always includes screenshots, `False` never includes screenshots and excludes screenshot tool
 * `vision_detail_level` (default: `'auto'`): Screenshot detail level - `'low'`, `'high'`, or `'auto'`
-* `page_extraction_llm`: Separate LLM model for page content extraction. You can choose a small & fast model because it only needs to extract text from the page (default: same as `llm`)
+* `navigator_llm`: Optional LLM for the main browser step loop only (default: same as `llm`). Exposed after init as `agent.llm`; the planner remains `agent.planner_llm`.
+* `page_extraction_llm` / `extractor_llm`: Same option under two names—LLM for the `extract` tool and related extraction paths (default: same as `llm`). If both are passed, they must be the same instance.
+* `judge_llm`: Optional LLM for task judgement (default: same as planner `llm`, not the navigator override)
 
 ### Actions & Behavior
 

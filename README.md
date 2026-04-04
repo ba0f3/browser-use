@@ -89,6 +89,17 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+**Multiple LLMs (optional):** The `llm` argument is the **planner**—the default model for every role unless you override it. Use **`navigator_llm`** for the main action loop only, and **`page_extraction_llm`** or **`extractor_llm`** (alias) for the `extract` tool. If you omit the overrides, planner is used for all. After `Agent(...)` is constructed, `agent.llm` is the effective navigator; `agent.planner_llm` is always the planner instance.
+
+```python
+agent = Agent(
+    task="...",
+    llm=strong_model,           # planner default for extractor, judge, compaction fallback, etc.
+    navigator_llm=fast_model,  # optional: per-step browser decisions only
+    page_extraction_llm=cheap_model,  # optional: extract action only (or use extractor_llm=...)
+)
+```
+
 Check out the [library docs](https://docs.browser-use.com/open-source/introduction) and the [cloud docs](https://docs.cloud.browser-use.com) for more!
 
 <br/>
